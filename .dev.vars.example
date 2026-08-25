@@ -1,0 +1,4 @@
+# Copy this file to worker/.dev.vars for local development.
+# Never commit worker/.dev.vars or put these values in wrangler.jsonc.
+ATP_ACCESS_ID=
+JCDECAUX_API_KEY=

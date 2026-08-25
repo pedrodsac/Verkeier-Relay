@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "verkeier-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-25",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": [
+      "ATP_ACCESS_ID",
+      "JCDECAUX_API_KEY"
+    ]
+  }
+}
