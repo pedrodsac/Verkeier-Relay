@@ -55,9 +55,11 @@ function buildUpstreamURL(url: URL, env: Env): URL {
       upstream.searchParams.set("accessId", requiredSecret(env.ATP_ACCESS_ID, "ATP_ACCESS_ID"));
       upstream.searchParams.set("originCoordLat", latitude);
       upstream.searchParams.set("originCoordLong", longitude);
-      upstream.searchParams.set("maxNo", "50");
-      upstream.searchParams.set("r", "1500");
+      upstream.searchParams.set("maxNo", boundedInteger(url.searchParams.get("maxNo"), 1, 100, 50, "maxNo"));
+      upstream.searchParams.set("r", boundedInteger(url.searchParams.get("r"), 100, 5_000, 1_500, "r"));
       upstream.searchParams.set("type", "SE");
+      forwardOptional(upstream, url, "products", productsValue);
+      forwardOptional(upstream, url, "lang", languageValue);
       upstream.searchParams.set("format", "json");
       return upstream;
     }
@@ -70,8 +72,20 @@ function buildUpstreamURL(url: URL, env: Env): URL {
 
       const upstream = new URL(`${ATP_API_BASE}/departureBoard`);
       upstream.searchParams.set("accessId", requiredSecret(env.ATP_ACCESS_ID, "ATP_ACCESS_ID"));
-      upstream.searchParams.set("lang", "fr");
+      forwardOptional(upstream, url, "lang", languageValue, "fr");
       upstream.searchParams.set("id", stopId);
+      forwardOptional(upstream, url, "direction", identifierValue);
+      forwardOptional(upstream, url, "date", dateValue);
+      forwardOptional(upstream, url, "time", timeValue);
+      forwardOptional(upstream, url, "duration", durationValue);
+      forwardOptional(upstream, url, "maxJourneys", maxJourneysValue);
+      forwardOptional(upstream, url, "products", productsValue);
+      forwardOptional(upstream, url, "operators", listValue);
+      forwardOptional(upstream, url, "lines", listValue);
+      forwardOptional(upstream, url, "platforms", listValue);
+      forwardOptional(upstream, url, "rtMode", realtimeModeValue);
+      forwardOptional(upstream, url, "passlist", passlistValue);
+      forwardOptional(upstream, url, "requestId", requestIDValue);
       upstream.searchParams.set("format", "json");
       return upstream;
     }
@@ -87,6 +101,128 @@ function buildUpstreamURL(url: URL, env: Env): URL {
       throw new ProxyRequestError("Unknown API route.", 404);
   }
 }
+
+type ParameterValidator = (value: string, name: string) => string;
+
+function forwardOptional(
+  upstream: URL,
+  incoming: URL,
+  name: string,
+  validator: ParameterValidator,
+  fallback?: string
+): void {
+  const raw = incoming.searchParams.get(name);
+  const value = raw === null || raw.trim() === "" ? fallback : validator(raw, name);
+  if (value !== undefined) {
+    upstream.searchParams.set(name, value);
+  }
+}
+
+function boundedInteger(
+  value: string | null,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+  name: string
+): string {
+  if (value === null || value.trim() === "") return String(fallback);
+  if (!/^\d+$/.test(value.trim())) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < minimum || number > maximum) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+
+  return String(number);
+}
+
+const durationValue: ParameterValidator = (value, name) =>
+  boundedInteger(value, 0, 1_439, 120, name);
+
+const maxJourneysValue: ParameterValidator = (value, name) =>
+  boundedInteger(value, 1, 100, 20, name);
+
+const productsValue: ParameterValidator = (value, name) => {
+  const normalized = boundedInteger(value, 0, 295, 0, name);
+  const number = Number(normalized);
+  // Documented ATP product bits: express/national/local train, bus, tram.
+  if ((number & ~295) !== 0) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const languageValue: ParameterValidator = (value, name) => {
+  if (!/^[A-Za-z]{2,5}$/.test(value.trim())) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return value.trim().toLowerCase();
+};
+
+const identifierValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 100 || !/^[A-Za-z0-9._:/ -]+$/.test(normalized)) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const listValue: ParameterValidator = (value, name) => {
+  const values = value.split(",").map((item) => identifierValue(item, name));
+  if (values.length > 50) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return values.join(",");
+};
+
+const dateValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const timeValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim();
+  const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(normalized);
+  if (!match) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? "0");
+  if (hour > 23 || minute > 59 || second > 59) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const realtimeModeValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized !== "FULL" && normalized !== "OFF") {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const passlistValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim();
+  if (normalized !== "0" && normalized !== "1") {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
+
+const requestIDValue: ParameterValidator = (value, name) => {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(normalized)) {
+    throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
+  }
+  return normalized;
+};
 
 function requiredCoordinate(
   value: string | null,
