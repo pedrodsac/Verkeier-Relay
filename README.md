@@ -14,10 +14,9 @@ cannot provide or override those credentials.
 ## Local development
 
 ```sh
-cd worker
 cp .dev.vars.example .dev.vars
 # Edit .dev.vars and add the ATP and JCDecaux credentials.
-npm install
+npm ci
 npm run dev
 ```
 
@@ -28,14 +27,15 @@ when using a simulator. An iOS device needs a reachable HTTPS URL instead of
 ## Deploy
 
 ```sh
-cd worker
-npm install
+npm ci
 npx wrangler login
-npx wrangler deploy --secrets-file .dev.vars
+npm run typecheck
+npm test
+npx wrangler deploy --keep-vars
 ```
 
-The required secret declaration in `wrangler.jsonc` makes deploy-time secret
-configuration explicit. For later rotations, use
+Configure the two secrets before the first deploy. For initial setup and later
+rotations, use
 `npx wrangler secret put ATP_ACCESS_ID` and
 `npx wrangler secret put JCDECAUX_API_KEY`; secret values are never committed
 to this repository.
@@ -51,3 +51,17 @@ The Worker endpoint is publicly callable because the iOS app must be able to
 reach it. The proxy hides the credentials, but it is not an authentication
 boundary. Add a Cloudflare rate-limiting/WAF rule for the Worker before a
 public release, and monitor upstream quota usage.
+
+## Departure-board contract
+
+The relay forwards validated `date`, `time`, `duration`, `maxJourneys`,
+`passlist`, `rtMode`, destination and product/line/operator/platform filters.
+ATP supports `SERVER_DEFAULT` and `OFF`; the legacy `FULL` value is translated
+to `SERVER_DEFAULT` for older clients. A `passlist=1` request returns the
+upstream per-stop prediction fields without rewriting the response. Successful
+upstream responses include `X-Verkeier-Relay-Version: passlist-v2` and are not
+cached by the relay. App and package caches manage freshness.
+
+Run `npm test` for deterministic allowlist/validation tests and `npm run
+typecheck` before deploying. Live contract checks should confirm both a bounded
+journey count and a nonempty `Stops.Stop` passlist.
