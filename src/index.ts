@@ -39,13 +39,13 @@ export default {
         return jsonError(error.message, error.status);
       }
 
-      console.error("Upstream request failed", error);
+      console.error("Upstream request failed");
       return jsonError("The upstream API request failed.", 502);
     }
   }
 };
 
-function buildUpstreamURL(url: URL, env: Env): URL {
+export function buildUpstreamURL(url: URL, env: Env): URL {
   switch (url.pathname) {
     case "/atp/location.nearbystops": {
       const latitude = requiredCoordinate(url.searchParams.get("originCoordLat"), -90, 90, "originCoordLat");
@@ -202,7 +202,9 @@ const timeValue: ParameterValidator = (value, name) => {
 
 const realtimeModeValue: ParameterValidator = (value, name) => {
   const normalized = value.trim().toUpperCase();
-  if (normalized !== "FULL" && normalized !== "OFF") {
+  // Older app versions send FULL. Translate it to ATP's supported default.
+  if (normalized === "FULL") return "SERVER_DEFAULT";
+  if (normalized !== "SERVER_DEFAULT" && normalized !== "OFF") {
     throw new ProxyRequestError(`The ${name} query parameter is invalid.`, 400);
   }
   return normalized;
@@ -257,6 +259,7 @@ function forwardResponse(upstreamResponse: Response): Response {
     upstreamResponse.headers.get("Content-Type") ?? "application/json"
   );
   headers.set("Cache-Control", "no-store");
+  headers.set("X-Verkeier-Relay-Version", "passlist-v2");
 
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
@@ -277,11 +280,10 @@ function jsonError(message: string, status: number): Response {
 }
 
 class ProxyRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number
-  ) {
+  readonly status: number;
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
     this.name = "ProxyRequestError";
   }
 }
