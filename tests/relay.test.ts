@@ -20,7 +20,7 @@ test('legacy FULL translates to the supported ATP mode', () => {
 });
 
 test('invalid mode, oversized duration and invalid passlist are rejected', async () => {
-  for (const query of ['rtMode=UNKNOWN', 'duration=2000', 'passlist=2', 'maxJourneys=101']) {
+  for (const query of ['rtMode=UNKNOWN', 'duration=2000', 'passlist=2', 'maxJourneys=-2', 'maxJourneys=1.5']) {
     const response = await worker.fetch(new Request(`https://fixture.invalid/atp/departureBoard?id=stop&${query}`), env);
     assert.equal(response.status, 400);
   }
@@ -29,4 +29,13 @@ test('invalid mode, oversized duration and invalid passlist are rejected', async
 test('unsupported routes and methods do not contact upstream', async () => {
   assert.equal((await worker.fetch(new Request('https://fixture.invalid/atp/journeyDetail'), env)).status, 404);
   assert.equal((await worker.fetch(new Request('https://fixture.invalid/atp/departureBoard?id=stop', { method: 'POST' }), env)).status, 405);
+});
+
+test('departure boards default to all results and accept counts above the old cap', () => {
+  for (const count of [null, '-1', '101', '10000']) {
+    const url = new URL('https://fixture.invalid/atp/departureBoard?id=stop');
+    if (count !== null) url.searchParams.set('maxJourneys', count);
+    const upstream = buildUpstreamURL(url, env);
+    assert.equal(upstream.searchParams.get('maxJourneys'), count ?? '-1');
+  }
 });

@@ -78,7 +78,7 @@ export function buildUpstreamURL(url: URL, env: Env): URL {
       forwardOptional(upstream, url, "date", dateValue);
       forwardOptional(upstream, url, "time", timeValue);
       forwardOptional(upstream, url, "duration", durationValue);
-      forwardOptional(upstream, url, "maxJourneys", maxJourneysValue);
+      forwardOptional(upstream, url, "maxJourneys", maxJourneysValue, "-1");
       forwardOptional(upstream, url, "products", productsValue);
       forwardOptional(upstream, url, "operators", listValue);
       forwardOptional(upstream, url, "lines", listValue);
@@ -141,8 +141,11 @@ function boundedInteger(
 const durationValue: ParameterValidator = (value, name) =>
   boundedInteger(value, 0, 1_439, 120, name);
 
-const maxJourneysValue: ParameterValidator = (value, name) =>
-  boundedInteger(value, 1, 100, 20, name);
+// ATP defines -1 as all services within the requested duration.
+const maxJourneysValue: ParameterValidator = (value, name) => {
+  if (value.trim() === "-1") return "-1";
+  return boundedInteger(value, 0, Number.MAX_SAFE_INTEGER, -1, name);
+};
 
 const productsValue: ParameterValidator = (value, name) => {
   const normalized = boundedInteger(value, 0, 295, 0, name);

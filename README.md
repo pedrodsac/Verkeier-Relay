@@ -56,6 +56,9 @@ public release, and monitor upstream quota usage.
 
 The relay forwards validated `date`, `time`, `duration`, `maxJourneys`,
 `passlist`, `rtMode`, destination and product/line/operator/platform filters.
+Omitted `maxJourneys` defaults to `-1` (all services in the requested window);
+explicit nonnegative counts have no relay-imposed upper cap. ATP limits
+`duration` to 0–1,439 minutes.
 ATP supports `SERVER_DEFAULT` and `OFF`; the legacy `FULL` value is translated
 to `SERVER_DEFAULT` for older clients. A `passlist=1` request returns the
 upstream per-stop prediction fields without rewriting the response. Successful
@@ -63,5 +66,5 @@ upstream responses include `X-Verkeier-Relay-Version: passlist-v2` and are not
 cached by the relay. App and package caches manage freshness.
 
 Run `npm test` for deterministic allowlist/validation tests and `npm run
-typecheck` before deploying. Live contract checks should confirm both a bounded
-journey count and a nonempty `Stops.Stop` passlist.
+typecheck` before deploying. Live contract checks should confirm an unrestricted
+journey count (`maxJourneys=-1`) and a nonempty `Stops.Stop` passlist.
