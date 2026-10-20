@@ -65,6 +65,14 @@ upstream per-stop prediction fields without rewriting the response. Successful
 upstream responses include `X-Verkeier-Relay-Version: passlist-v2` and are not
 cached by the relay. App and package caches manage freshness.
 
+Every forwarded response carries a diagnostic `Server-Timing` header, for
+example `upstream;dur=812.4;desc="headers", edge;desc="LUX"`. `upstream` is
+how long the Worker waited for the upstream response headers. `edge` is the
+Cloudflare location that ran it. A Worker's clock only advances across I/O, and
+the body is streamed through, so body transfer is not included. The client's own
+wait minus `upstream` is relay and network time. The routing benchmark records
+the header with each request's metrics.
+
 Run `npm test` for deterministic allowlist/validation tests and `npm run
 typecheck` before deploying. Live contract checks should confirm an unrestricted
 journey count (`maxJourneys=-1`) and a nonempty `Stops.Stop` passlist.

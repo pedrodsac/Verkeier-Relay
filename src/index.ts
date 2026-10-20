@@ -27,13 +27,16 @@ export default {
 
     try {
       const upstream = buildUpstreamURL(url, env);
+      const upstreamStarted = performance.now();
       const upstreamResponse = await fetch(upstream, {
         headers: {
           Accept: "application/json"
         }
       });
+      const colo = request.cf?.colo;
+      const timing = serverTiming(performance.now() - upstreamStarted, typeof colo === "string" ? colo : undefined);
 
-      return forwardResponse(upstreamResponse);
+      return forwardResponse(upstreamResponse, timing);
     } catch (error) {
       if (error instanceof ProxyRequestError) {
         return jsonError(error.message, error.status);
@@ -255,7 +258,16 @@ function requiredSecret(value: string | undefined, name: string): string {
   return value;
 }
 
-function forwardResponse(upstreamResponse: Response): Response {
+// Diagnostic only. A Worker's clock advances only across I/O, so the one interval it can
+// measure is the wait for the upstream response headers. The body is streamed through and is
+// not included; the client's own wait minus this value is relay and network time.
+export function serverTiming(upstreamMilliseconds: number, colo?: string): string {
+  const entries = [`upstream;dur=${Math.max(0, upstreamMilliseconds).toFixed(1)};desc="headers"`];
+  if (colo && /^[A-Z]{3}$/.test(colo)) entries.push(`edge;desc="${colo}"`);
+  return entries.join(", ");
+}
+
+function forwardResponse(upstreamResponse: Response, timing: string): Response {
   const headers = new Headers(corsHeaders);
   headers.set(
     "Content-Type",
@@ -263,6 +275,7 @@ function forwardResponse(upstreamResponse: Response): Response {
   );
   headers.set("Cache-Control", "no-store");
   headers.set("X-Verkeier-Relay-Version", "passlist-v2");
+  headers.set("Server-Timing", timing);
 
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,

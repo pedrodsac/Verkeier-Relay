@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { buildUpstreamURL } from '../src/index.ts';
+import worker, { buildUpstreamURL, serverTiming } from '../src/index.ts';
 
 const env = { ATP_ACCESS_ID: 'fixture-atp', JCDECAUX_API_KEY: 'fixture-bike' };
 
@@ -38,4 +38,28 @@ test('departure boards default to all results and accept counts above the old ca
     const upstream = buildUpstreamURL(url, env);
     assert.equal(upstream.searchParams.get('maxJourneys'), count ?? '-1');
   }
+});
+
+test('forwarded responses report the wait for the upstream headers in Server-Timing', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return new Response('{"Departure":[]}', { headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const response = await worker.fetch(new Request('https://fixture.invalid/atp/departureBoard?id=stop'), env);
+    assert.equal(response.status, 200);
+    const match = /^upstream;dur=(\d+\.\d);desc="headers"$/.exec(response.headers.get('Server-Timing') ?? '');
+    assert.ok(match, response.headers.get('Server-Timing') ?? 'missing');
+    assert.ok(Number(match[1]) >= 25);
+    assert.equal(await response.text(), '{"Departure":[]}');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('Server-Timing names a valid edge location and never a malformed one', () => {
+  assert.equal(serverTiming(812.44, 'LUX'), 'upstream;dur=812.4;desc="headers", edge;desc="LUX"');
+  assert.equal(serverTiming(-1, 'lux"; x'), 'upstream;dur=0.0;desc="headers"');
+  assert.equal(serverTiming(5), 'upstream;dur=5.0;desc="headers"');
 });
